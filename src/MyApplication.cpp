@@ -1,84 +1,91 @@
-#include "Application.h"
+#include "core/Application.h"
+#include "Mesh.h"
 #include <iostream>
+
 
 using namespace std;
 
 class MyApplication: public Application
 {
 private:
+    Program* program = NULL;
     Renderer *renderer = NULL;
-    VertexData *inputs = NULL;
+    float angle = 0;
+    Mesh* dragon = NULL;
+    Buffer* vertex = NULL;
+    Buffer* normal = NULL;
+    Buffer* index = NULL;
     
 public:
+    MyApplication(int argc, char* argv[]);
+    void update(int time);
     void render();
     void setup();
     void teardown();
 };
 
+MyApplication::MyApplication(int argc, char* argv[]) : Application(argc, argv) {}
+
+void MyApplication::update(int elapsedTime)
+{
+    angle = 45.0f / 1000 * elapsedTime;
+    mat4 modelMatrix = rotate(angle, 0.0f, 1.0f, 0.0f);
+    renderer->setMatrix("modelMatrix", modelMatrix);
+}
+
 void MyApplication::render()
 {
-    renderer->render(*inputs);
+    renderer->indexedRender(PRIMITIVE_TRIANGLES, dragon->getIndexCount()); 
 }
 
 void MyApplication::setup()
 {
-    string vertexSrc = 
-        "#version 430                                                     \n"
-        "layout (location = 0) in vec3 VertexPos3D;                       \n"
-        "void main()                                                      \n"
-        "{                                                                \n"
-        "    gl_Position = vec4( VertexPos3D.x, VertexPos3D.y, 0, 1 );    \n"
-        "}                                                                  ";
+     
+    program = new Program(); 
+    program->addShader(Shader::fromFile("shaders/diffuse.vert"));
+    program->addShader(Shader::fromFile("shaders/diffuse.frag"));
+    program->link();
 
-    Shader vShader(vertexSrc, SHADER_VERTEX);
+    renderer = program->createRenderer();
 
-    string pixelSrc = 
-        "#version 430                                  \n"
-        "out vec4 Fragment;                            \n"
-        "void main()                                   \n"
-        "{                                             \n"
-        "    Fragment = vec4( 1.0, 1.0, 1.0, 1.0 );    \n"
-        "}                                               ";
+    mat4 projectionMatrix = perspective(30.0f, 640.0f/480, 0.001f, 100.0f);
 
-    Shader pShader(pixelSrc, SHADER_PIXEL);
-    vector<Shader*> shaders;
-    shaders.push_back(&vShader);
-    shaders.push_back(&pShader);
-    renderer = new Renderer(shaders);
+    mat4 viewMatrix = lookat(vec3(15, 15, 15), vec3(0, 4, 0), vec3(0, 1, 0));
+    mat4 modelMatrix = rotate(angle, 0.0f, 1.0f, 0.0f);
+    renderer->setMatrix("projectionMatrix", projectionMatrix);
+    renderer->setMatrix("modelMatrix", modelMatrix);
+    renderer->setMatrix("viewMatrix", viewMatrix);
+    renderer->setVec("lightPosition", vec3(1000, 1000, -1000));
 
-    //IBO data
-	GLuint indexData[] = { 0, 1, 2, 3 };
-    //indexBuffer = new Renderer::IndexBuffer(indexData, 4);
+    dragon = Mesh::fromOBJ("models/dragon.obj");
 
-    //VBO data
-    vec3 vertexData[] =
-    {
-        vec3(-0.5f, -0.5f, 0.0f),
-        vec3(0.5f, -0.5f, 0.0f),
-        vec3(0.5f,  0.5f, 0.0f),
-        vec3(-0.5f,  0.5f, 0.0f)
-    };
-    //vertexBuffer = new Renderer::VertexBuffer(vertexData, 4);
+     
 
-    inputs = new VertexData();
-    inputs->put(0, vertexData, 4);
-    inputs->index(indexData, 4);
-    inputs->pack();
+    //vertex = new Buffer(dragon->getVertexCount(), 3, FLOAT, dragon->getVertex());
+    //normal = new Buffer(dragon->getVertexCount(), 3, FLOAT, dragon->getNormal());
+    //index = new Buffer(dragon->getIndexCount(), 1, UINT, dragon->getIndex());
 
-    surface.setClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+     
+
+    renderer->setVertexData("vertexPos", dragon->getVertex(), TYPE_FLOAT, 0, 3, sizeof(VertexData));
+    renderer->setVertexData("vertexNormal", dragon->getVertex(), TYPE_FLOAT, sizeof(vec3), 3, sizeof(VertexData));
+    renderer->index(dragon->getIndex());
+    
+    setClearColor(0.95f, 0.95f, 0.95f, 1.0f); 
+     
 }
 
 void MyApplication::teardown()
 {
     delete renderer;
-    delete inputs;
+    delete program;
 }
 
-int main( int argc, char* args[] )
+int main(int argc, char** argv)
 {
     try 
     {
-        MyApplication app = MyApplication();
+        MyApplication app = MyApplication(argc, argv); 
 	    return app.run();
     }
 	catch(Exception e)
